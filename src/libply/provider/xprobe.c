@@ -49,6 +49,15 @@ static int __xprobe_create(FILE *ctrl, const char *stem, const char *func)
 	return strlen(stem) + 2 * strlen(func) + 2;
 }
 
+static int __xprobe_delete(FILE *ctrl, const char *func)
+{
+	fputs("-:", ctrl);
+	fputs(func, ctrl);
+	fputc('\n', ctrl);
+
+	return 2 + strlen(func) + 1;
+}
+
 static int xprobe_glob(struct ply_probe *pb, glob_t *gl)
 {
 	char *evglob;
@@ -85,12 +94,7 @@ int xprobe_detach(struct ply_probe *pb)
 	pending = 0;
 
 	for (i = 0; i < gl.gl_pathc; i++) {
-		fputs("-:", xp->ctrl);
-		pending += 2;
-		fputs(&gl.gl_pathv[i][evstart], xp->ctrl);
-		pending += strlen(&gl.gl_pathv[i][evstart]);
-		fputc('\n', xp->ctrl);
-		pending++;
+		pending += __xprobe_delete(xp->ctrl, &gl.gl_pathv[i][evstart]);
 
 		/* The kernel parser doesn't deal with a probe definition
 		 * being split across two writes. So if there's less than
