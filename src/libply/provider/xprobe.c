@@ -62,20 +62,6 @@ static int xprobe_glob(struct ply_probe *pb, glob_t *gl)
 	return err ? -EINVAL : 0;
 }
 
-static char *xprobe_func(struct ply_probe *pb, char *path)
-{
-	char *slash;
-
-	path += strlen(TRACEPATH "events/");
-	path += strlen(pb->ply->group);
-
-	slash = strchr(path, '/');
-	assert(slash);
-	*slash = '\0';
-	return path;
-}
-
-
 int xprobe_detach(struct ply_probe *pb)
 {
 	struct xprobe *xp = pb->provider_data;
