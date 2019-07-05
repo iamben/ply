@@ -71,24 +71,19 @@ static int xprobe_glob(struct ply_probe *pb, glob_t *gl)
 	return err ? -EINVAL : 0;
 }
 
-int xprobe_detach(struct ply_probe *pb)
+static int __xprobe_delete_all(struct ply_probe *pb)
 {
 	struct xprobe *xp = pb->provider_data;
 	glob_t gl;
 	size_t i, evstart;
 	int err, pending;
 
-	if (!xp->ctrl)
-		return 0;
-
-	for (i = 0; i < xp->n_evs; i++)
-		close(xp->evfds[i]);
-
 	err = xprobe_glob(pb, &gl);
 	if (err)
 		return err;
 
-	assert(gl.gl_pathc == xp->n_evs);
+	if (gl.gl_pathc != xp->n_evs)
+		_w("gl.gl_pathc (%d) != xp->n_evs (%d), failed to create some probes?\n", gl.gl_pathc, xp->n_evs);
 
 	evstart = strlen(TRACEPATH "events/");
 	pending = 0;
@@ -109,6 +104,43 @@ int xprobe_detach(struct ply_probe *pb)
 	}
 
 	globfree(&gl);
+	return err;
+}
+
+static int __xprobe_detach(struct ply_probe *pb)
+{
+	struct xprobe *xp = pb->provider_data;
+	size_t i;
+
+	for (i = 0; i < xp->n_evs; i++)
+		close(xp->evfds[i]);
+
+	free(xp->evfds);
+	xp->evfds = NULL;
+
+	return 0; // no error at this moment
+}
+
+int xprobe_detach(struct ply_probe *pb)
+{
+	struct xprobe *xp = pb->provider_data;
+	int err;
+
+	if (!xp->ctrl)
+		return 0;
+
+	err = __xprobe_detach(pb);
+	if (err)
+		goto err_close;
+
+	err = __xprobe_delete_all(pb);
+	if (err)
+		goto err_close;
+
+	if (!err)
+		err = fflush(xp->ctrl) ? -errno : 0;
+
+err_close:
 	fclose(xp->ctrl);
 	return err;
 }
@@ -215,14 +247,15 @@ int xprobe_attach(struct ply_probe *pb)
 
 	err = __xprobe_attach(pb);
 	if (err)
-		goto err_destroy;
+		goto err_detach;
 
 	return 0;
 
-err_destroy:
-	/* xprobe_destroy(xp); */
+err_detach:
+	__xprobe_detach(pb);
 
 err_close:
+	__xprobe_delete_all(pb);
 	fclose(xp->ctrl);
 	return err;
 }
