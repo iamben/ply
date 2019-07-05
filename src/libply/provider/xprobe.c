@@ -33,11 +33,16 @@ static int __xprobe_create(FILE *ctrl, const char *stem, const char *func)
 {
 	char *funcname = strdup(func);
 	char *offs;
+	size_t i;
 
 	assert(funcname);
 	offs = strchr(funcname, '+');
 	if (offs)
 		*offs = '_';
+	
+	for(i = 0; 0x0 != funcname[i]; ++i)
+		if ('.' == funcname[i])
+			funcname[i] = '_';
 
 	fputs(stem,     ctrl);
 	fputs(funcname, ctrl);
