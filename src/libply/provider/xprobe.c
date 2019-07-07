@@ -88,7 +88,7 @@ static int __xprobe_delete_all(struct ply_probe *pb)
 		return err;
 
 	if (gl.gl_pathc != xp->n_evs)
-		_w("gl.gl_pathc (%d) != xp->n_evs (%d), failed to create some probes?\n", gl.gl_pathc, xp->n_evs);
+		_w("gl.gl_pathc (%d) != xp->n_evs (%d), failed to create some probes? (check dmesg for hints)\n", gl.gl_pathc, xp->n_evs);
 
 	evstart = strlen(TRACEPATH "events/");
 	pending = 0;
@@ -155,25 +155,19 @@ static int xprobe_create_pattern(struct ply_probe *pb)
 {
 	struct xprobe *xp = pb->provider_data;
 	struct ksym *sym;
-	int err, pending = 0;
+	int err;
 
 	ksyms_foreach(sym, pb->ply->ksyms) {
 		if (fnmatch(xp->pattern, sym->sym, PLY_FNM_FLAGS))
 			continue;
 
-		pending += __xprobe_create(xp->ctrl, xp->stem, sym->sym);
+		__xprobe_create(xp->ctrl, xp->stem, sym->sym);
 		xp->n_evs++;
 
-		/* The kernel parser doesn't deal with a probe definition
-		 * being split across two writes. So if there's less than
-		 * 512 bytes left, flush the buffer. */
-		if (pending > (0x1000 - 0x200)) {
-			err = fflush(xp->ctrl);
-			if (err)
-				return -errno;
-
-			pending = 0;
-		}
+		/* force flush, so we know the exact failing probe
+		 */
+		if (fflush(xp->ctrl))
+			_w("Unable to create probe on %s, skipping\n", sym->sym);
 	}
 
 	return 0;
@@ -208,12 +202,9 @@ static int __xprobe_attach(struct ply_probe *pb)
 	if (err)
 		return err;
 
-	if (gl.gl_pathc != xp->n_evs) {
-		_d("n:%d c:%d\n", xp->n_evs, gl.gl_pathc);
-		pause();
-	}
-	
-	assert(gl.gl_pathc == xp->n_evs);
+	if (gl.gl_pathc != xp->n_evs)
+		_w("gl.gl_pathc (%d) != xp->n_evs (%d), failed to create some probes? (check dmesg for hints)\n", gl.gl_pathc, xp->n_evs);
+
 	for (i = 0; i < (int)gl.gl_pathc; i++) {
 		xp->evfds[i] = perf_event_attach(pb, gl.gl_pathv[i]);
 		if (xp->evfds[i] < 0) {
